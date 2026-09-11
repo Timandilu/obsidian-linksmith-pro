@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Linksmith Pro visual check</title>
+		<link rel="stylesheet" href="../styles.css" />
+		<style>
+			:root {
+				--background-primary: #fbfaf8;
+				--background-modifier-border: #e4e0d9;
+				--text-faint: #9b968e;
+				--text-muted: #6f6a62;
+				--text-normal: #26231f;
+			}
+
+			body {
+				display: grid;
+				min-height: 100vh;
+				margin: 0;
+				background: #f2efe9;
+				font-family: 'Segoe UI', sans-serif;
+				place-items: center;
+			}
+
+			.suggestion-container {
+				width: 380px;
+				padding: 8px;
+				border: 1px solid var(--background-modifier-border);
+				border-radius: 10px;
+				background: var(--background-primary);
+				box-shadow: 0 16px 42px rgb(52 45 34 / 12%);
+			}
+
+			.linksmith-suggestion {
+				padding: 9px 10px;
+				border-radius: 7px;
+			}
+
+			.linksmith-suggestion.is-selected {
+				background: #ebe7df;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="suggestion-container">
+			<div class="linksmith-suggestion is-selected">
+				<div class="linksmith-suggestion-content">
+					<div class="linksmith-suggestion-main">
+						<span class="linksmith-suggestion-icon">🔗</span>
+						<span class="linksmith-suggestion-title"
+							>Great Pyramid</span
+						>
+						<span class="linksmith-suggestion-badge">note</span>
+					</div>
+					<div class="linksmith-suggestion-subtitle">
+						→ The Mathematics of the Great Pyramid
+					</div>
+					<div class="linksmith-suggestion-path">03_Reads</div>
+				</div>
+			</div>
+			<div class="linksmith-suggestion">
+				<div class="linksmith-suggestion-content">
+					<div class="linksmith-suggestion-main">
+						<span class="linksmith-suggestion-icon">🔗</span>
+						<span class="linksmith-suggestion-title"
+							>King’s Chamber</span
+						>
+						<span class="linksmith-suggestion-badge">heading</span>
+					</div>
+					<div class="linksmith-suggestion-subtitle">
+						in The Mathematics of the Great Pyramid
+					</div>
+					<div class="linksmith-suggestion-path">03_Reads</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>

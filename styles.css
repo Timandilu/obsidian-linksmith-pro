@@ -1,0 +1,42 @@
+.linksmith-suggestion .linksmith-suggestion-main {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.linksmith-suggestion .linksmith-suggestion-icon {
+	flex-shrink: 0;
+	font-size: 12px;
+	opacity: 0.6;
+}
+
+.linksmith-suggestion .linksmith-suggestion-title {
+	flex: 1;
+	color: var(--text-normal);
+	font-size: 14px;
+	font-weight: 500;
+}
+
+.linksmith-suggestion .linksmith-suggestion-badge {
+	flex-shrink: 0;
+	padding: 2px 6px;
+	border-radius: 3px;
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.linksmith-suggestion .linksmith-suggestion-subtitle {
+	margin-left: 18px;
+	color: var(--text-muted);
+	font-size: 12px;
+	font-style: italic;
+}
+
+.linksmith-suggestion .linksmith-suggestion-path {
+	margin-left: 18px;
+	color: var(--text-faint);
+	font-size: 11px;
+}
