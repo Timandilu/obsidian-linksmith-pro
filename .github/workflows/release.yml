@@ -1,0 +1,83 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - '[0-9]*.[0-9]*.[0-9]*'
+
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    release:
+        name: Build, attest, and release
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            id-token: write
+            attestations: write
+            artifact-metadata: write
+
+        steps:
+            - name: Check out tagged source
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Set up Node.js
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Verify release version
+              env:
+                  RELEASE_VERSION: ${{ github.ref_name }}
+              run: |
+                  [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+                    echo "Tag must be a plain semantic version such as 1.0.1."
+                    exit 1
+                  }
+                  node - <<'NODE'
+                  const fs = require("node:fs");
+                  const releaseVersion = process.env.RELEASE_VERSION;
+                  const packageVersion = require("./package.json").version;
+                  const manifestVersion = require("./manifest.json").version;
+
+                  if (packageVersion !== releaseVersion || manifestVersion !== releaseVersion) {
+                    console.error(
+                      `Version mismatch: tag=${releaseVersion}, package=${packageVersion}, manifest=${manifestVersion}`,
+                    );
+                    process.exit(1);
+                  }
+
+                  const versions = JSON.parse(fs.readFileSync("versions.json", "utf8"));
+                  if (!Object.hasOwn(versions, releaseVersion)) {
+                    console.error(`versions.json has no entry for ${releaseVersion}`);
+                    process.exit(1);
+                  }
+                  NODE
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Check and build
+              run: npm run check
+
+            - name: Attest release files
+              uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+              with:
+                  subject-path: |
+                      main.js
+                      manifest.json
+                      styles.css
+
+            - name: Create GitHub release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: >-
+                  gh release create "$GITHUB_REF_NAME"
+                  main.js manifest.json styles.css
+                  --repo "$GITHUB_REPOSITORY"
+                  --title "Linksmith Pro $GITHUB_REF_NAME"
+                  --generate-notes
+                  --verify-tag

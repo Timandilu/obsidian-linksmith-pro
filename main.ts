@@ -1,8 +1,5 @@
 import {
-	App,
 	Plugin,
-	PluginSettingTab,
-	Setting,
 	TFile,
 	Notice,
 	EditorSuggest,
@@ -12,17 +9,18 @@ import {
 	EditorSuggestContext,
 	Modal,
 	ButtonComponent,
-	MarkdownView,
 	debounce,
-	TFolder,
+	parseFrontMatterAliases,
 } from 'obsidian';
 import { meetsMinimumTriggerCharacters } from './src/trigger';
+import { normalizeSettings } from './src/settings-data';
+import { LinksmithSettingTab } from './src/settings-tab';
 
 // ============================================================================
 // INTERFACES & TYPES
 // ============================================================================
 
-interface LinksmithSettings {
+export interface LinksmithSettings {
 	// Suggest settings
 	suggestEnabled: boolean;
 	suggestHeadingsEnabled: boolean;
@@ -203,7 +201,7 @@ class Indexer {
 		if (!cache) return;
 
 		// Index note
-		const aliases = cache.frontmatter?.aliases || [];
+		const aliases = parseFrontMatterAliases(cache.frontmatter) ?? [];
 		const tags = cache.tags?.map((t) => t.tag) || [];
 		const backlinkCount = Object.keys(
 			this.plugin.app.metadataCache.resolvedLinks[file.path] || {},
@@ -212,7 +210,7 @@ class Indexer {
 		const noteEntry: NoteEntry = {
 			path: file.path,
 			title: file.basename,
-			aliases: Array.isArray(aliases) ? aliases : [aliases],
+			aliases,
 			tags,
 			backlinkCount,
 			lastModified: file.stat.mtime,
@@ -272,14 +270,7 @@ class Indexer {
 
 	// Schedule a debounced full rebuild (runs in background)
 	scheduleBuild(): void {
-		if ((this as any).buildDebounced) {
-			(this as any).buildDebounced();
-		} else {
-			// Fallback: run build but don't await
-			this.build().catch((err) =>
-				console.error('Linksmith: scheduled build failed', err),
-			);
-		}
+		this.buildDebounced();
 	}
 
 	shouldIndexFile(file: TFile): boolean {
@@ -675,11 +666,11 @@ class LinksmithSuggest extends EditorSuggest<Candidate> {
 		// Fill text logic
 		if (candidate.kind === 'note') {
 			titleSpan.setText(candidate.matchedAlias || candidate.title);
-			badge.setText('note');
+			badge.setText('Note');
 			if (candidate.matchedAlias) subtitleText = `→ ${candidate.title}`;
 		} else {
 			titleSpan.setText(candidate.heading || '');
-			badge.setText('heading');
+			badge.setText('Heading');
 			subtitleText = `in ${candidate.title}`;
 		}
 
@@ -777,7 +768,7 @@ class LinksmithSuggest extends EditorSuggest<Candidate> {
 
 		const activeItem = document.querySelector(
 			'.suggestion-item.is-selected',
-		) as HTMLElement | null;
+		);
 		if (activeItem) {
 			activeItem.dispatchEvent(
 				new MouseEvent('click', {
@@ -839,7 +830,8 @@ class LinksmithSuggest extends EditorSuggest<Candidate> {
 		if (lastToken) {
 			const len = lastToken[1].length;
 			return {
-				offset: typedRaw.length - lastToken[0].trimEnd().length,
+				offset:
+					typedRaw.length - lastToken[0].replace(/\s+$/, '').length,
 				len,
 			};
 		}
@@ -1217,7 +1209,7 @@ class RetroEngine {
 		variants.add(text.toUpperCase());
 
 		// Remove special characters
-		const cleanText = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+		const cleanText = text.replace(/[.,/#!$%^&*;:{}=_`~()-]/g, '');
 		if (cleanText !== text) variants.add(cleanText);
 
 		// Handle plural/singular
@@ -1397,7 +1389,7 @@ class RetroReviewModal extends Modal {
 		});
 
 		new ButtonComponent(controls)
-			.setButtonText('Select All on Page')
+			.setButtonText('Select all on page')
 			.onClick(() => {
 				const start = this.currentPage * this.itemsPerPage;
 				const end = Math.min(
@@ -1411,14 +1403,14 @@ class RetroReviewModal extends Modal {
 			});
 
 		new ButtonComponent(controls)
-			.setButtonText('Deselect All')
+			.setButtonText('Deselect all')
 			.onClick(() => {
 				this.selectedSuggestions.clear();
 				this.renderSuggestions();
 			});
 
 		new ButtonComponent(controls)
-			.setButtonText(`Apply Selected (${this.selectedSuggestions.size})`)
+			.setButtonText(`Apply selected (${this.selectedSuggestions.size})`)
 			.setCta()
 			.onClick(() => this.applySelected());
 
@@ -1477,7 +1469,7 @@ class RetroReviewModal extends Modal {
 					'.mod-cta',
 				) as HTMLButtonElement;
 				if (button) {
-					button.textContent = `Apply Selected (${this.selectedSuggestions.size})`;
+					button.textContent = `Apply selected (${this.selectedSuggestions.size})`;
 				}
 			});
 
@@ -1487,19 +1479,19 @@ class RetroReviewModal extends Modal {
 
 			const mainText = content.createDiv();
 			mainText.createEl('strong', { text: suggestion.span });
-			mainText.createEl('span', { text: ' → ' });
+			mainText.createSpan({ text: ' → ' });
 			mainText.createEl('code', { text: suggestion.link });
 
 			const meta = content.createDiv({
 				cls: 'linksmith-suggestion-meta',
 			});
-			meta.createEl('span', {
+			meta.createSpan({
 				text: `Line ${suggestion.lineNumber + 1}`,
 			});
-			meta.createEl('span', {
+			meta.createSpan({
 				text: ` | Confidence: ${(suggestion.confidence * 100).toFixed(0)}%`,
 			});
-			meta.createEl('span', { text: ` | Type: ${suggestion.kind}` });
+			meta.createSpan({ text: ` | Type: ${suggestion.kind}` });
 
 			const context = content.createDiv({
 				cls: 'linksmith-suggestion-context',
@@ -1527,8 +1519,8 @@ class RetroReviewModal extends Modal {
 		});
 
 		// Previous button
-		const prevBtn = new ButtonComponent(buttons)
-			.setButtonText('← Previous')
+		new ButtonComponent(buttons)
+			.setButtonText('Previous')
 			.setDisabled(this.currentPage === 0)
 			.onClick(() => {
 				if (this.currentPage > 0) {
@@ -1538,7 +1530,7 @@ class RetroReviewModal extends Modal {
 			});
 
 		// Next button
-		const nextBtn = new ButtonComponent(buttons)
+		new ButtonComponent(buttons)
 			.setButtonText('Next →')
 			.setDisabled(this.currentPage >= totalPages - 1)
 			.onClick(() => {
@@ -1587,388 +1579,6 @@ class RetroReviewModal extends Modal {
 	onClose(): void {
 		const { contentEl } = this;
 		contentEl.empty();
-	}
-}
-
-// ============================================================================
-// SETTINGS TAB
-// ============================================================================
-
-class LinksmithSettingTab extends PluginSettingTab {
-	plugin: LinksmithPlugin;
-
-	constructor(app: App, plugin: LinksmithPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-
-		// ===== SUGGEST SETTINGS =====
-		new Setting(containerEl).setName('Live suggestions').setHeading();
-
-		new Setting(containerEl)
-			.setName('Enable suggestions')
-			.setDesc('Show link suggestions while typing')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.suggestEnabled)
-					.onChange(async (value) => {
-						this.plugin.settings.suggestEnabled = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Enable heading suggestions')
-			.setDesc('Include headings in suggestions')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.suggestHeadingsEnabled)
-					.onChange(async (value) => {
-						this.plugin.settings.suggestHeadingsEnabled = value;
-						await this.plugin.saveSettings();
-						await this.plugin.indexer.build();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Minimum characters to trigger')
-			.setDesc(
-				'Letters or digits required before suggestions appear, including after [[',
-			)
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 5, 1)
-					.setValue(this.plugin.settings.minCharsToTrigger)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.minCharsToTrigger = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Maximum suggestions')
-			.setDesc('Maximum number of suggestions to show')
-			.addSlider((slider) =>
-				slider
-					.setLimits(5, 20, 1)
-					.setValue(this.plugin.settings.maxSuggestions)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.maxSuggestions = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Start of word matching only')
-			.setDesc(
-				'When enabled, only matches at the start of words. Example: "wan" matches "wants" but not "swan". When disabled, matches anywhere.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.startOfWordOnly)
-					.onChange(async (value) => {
-						this.plugin.settings.startOfWordOnly = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Enable partial word matches')
-			.setDesc(
-				'When enabled, finds matches within words. Example: "schaden" matches "Schadensersatz"',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.partialWordMatches)
-					.onChange(async (value) => {
-						this.plugin.settings.partialWordMatches = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Use typed text as alias')
-			.setDesc(
-				'If enabled, creates links as [[Target|typed]] so the original text is preserved inside the link.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.useTypedAsAlias)
-					.onChange(async (value) => {
-						this.plugin.settings.useTypedAsAlias = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Maximum spaces to trigger')
-			.setDesc(
-				'How many spaces may appear in a typed phrase before suggestions stop appearing.',
-			)
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 5, 1)
-					.setValue(this.plugin.settings.maxSpacesToTrigger)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.maxSpacesToTrigger = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Show folder path in suggestions')
-			.setDesc(
-				'Display the parent folder in small grey text under each suggestion.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.showSuggestionPath)
-					.onChange(async (value) => {
-						this.plugin.settings.showSuggestionPath = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// ===== HEADING SETTINGS =====
-		new Setting(containerEl).setName('Heading options').setHeading();
-
-		new Setting(containerEl)
-			.setName('Minimum heading depth')
-			.setDesc('Minimum heading level to index (1 = H1)')
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 6, 1)
-					.setValue(this.plugin.settings.minHeadingDepth)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.minHeadingDepth = value;
-						await this.plugin.saveSettings();
-						await this.plugin.indexer.build();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Maximum heading depth')
-			.setDesc('Maximum heading level to index (6 = H6)')
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 6, 1)
-					.setValue(this.plugin.settings.maxHeadingDepth)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.maxHeadingDepth = value;
-						await this.plugin.saveSettings();
-						await this.plugin.indexer.build();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Prefer headings over notes')
-			.setDesc('When enabled, heading matches will be scored higher')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.preferHeadingsOverNotes)
-					.onChange(async (value) => {
-						this.plugin.settings.preferHeadingsOverNotes = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// ===== SCORING WEIGHTS =====
-		new Setting(containerEl).setName('Scoring weights').setHeading();
-
-		new Setting(containerEl)
-			.setName('Title weight')
-			.setDesc('Weight for title matches')
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 2, 0.1)
-					.setValue(this.plugin.settings.weightTitle)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.weightTitle = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Heading weight')
-			.setDesc('Weight for heading matches')
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 2, 0.1)
-					.setValue(this.plugin.settings.weightHeading)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.weightHeading = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Backlinks weight')
-			.setDesc('Weight for number of backlinks')
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 2, 0.1)
-					.setValue(this.plugin.settings.weightBacklinks)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.weightBacklinks = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Recency weight')
-			.setDesc('Weight for recently modified notes')
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 2, 0.1)
-					.setValue(this.plugin.settings.weightRecency)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.weightRecency = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// ===== EXCLUSIONS =====
-		new Setting(containerEl).setName('Exclusions').setHeading();
-
-		new Setting(containerEl)
-			.setName('Excluded folders')
-			.setDesc('Comma-separated list of folder paths to exclude')
-			.addTextArea((text) =>
-				text
-					.setValue(this.plugin.settings.excludedFolders.join(', '))
-					.onChange(async (value) => {
-						this.plugin.settings.excludedFolders = value
-							.split(',')
-							.map((s) => s.trim())
-							.filter((s) => s.length > 0);
-						await this.plugin.saveSettings();
-						await this.plugin.indexer.build();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Excluded files')
-			.setDesc('Comma-separated list of file paths to exclude')
-			.addTextArea((text) =>
-				text
-					.setValue(this.plugin.settings.excludedFiles.join(', '))
-					.onChange(async (value) => {
-						this.plugin.settings.excludedFiles = value
-							.split(',')
-							.map((s) => s.trim())
-							.filter((s) => s.length > 0);
-						await this.plugin.saveSettings();
-						await this.plugin.indexer.build();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Excluded tags')
-			.setDesc('Comma-separated list of tags to exclude (include #)')
-			.addTextArea((text) =>
-				text
-					.setValue(this.plugin.settings.excludedTags.join(', '))
-					.onChange(async (value) => {
-						this.plugin.settings.excludedTags = value
-							.split(',')
-							.map((s) => s.trim())
-							.filter((s) => s.length > 0);
-						await this.plugin.saveSettings();
-						await this.plugin.indexer.build();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Excluded title patterns')
-			.setDesc('Comma-separated regex patterns for titles to exclude')
-			.addTextArea((text) =>
-				text
-					.setValue(
-						this.plugin.settings.excludedTitlePatterns.join(', '),
-					)
-					.onChange(async (value) => {
-						this.plugin.settings.excludedTitlePatterns = value
-							.split(',')
-							.map((s) => s.trim())
-							.filter((s) => s.length > 0);
-						await this.plugin.saveSettings();
-						await this.plugin.indexer.build();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Excluded heading patterns')
-			.setDesc('Comma-separated regex patterns for headings to exclude')
-			.addTextArea((text) =>
-				text
-					.setValue(
-						this.plugin.settings.excludedHeadingPatterns.join(', '),
-					)
-					.onChange(async (value) => {
-						this.plugin.settings.excludedHeadingPatterns = value
-							.split(',')
-							.map((s) => s.trim())
-							.filter((s) => s.length > 0);
-						await this.plugin.saveSettings();
-						await this.plugin.indexer.build();
-					}),
-			);
-
-		// ===== RETRO-LINK SETTINGS =====
-		new Setting(containerEl).setName('Retro-linking').setHeading();
-
-		new Setting(containerEl)
-			.setName('Enable retro-linking')
-			.setDesc('Allow batch link suggestions')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.retroEnabled)
-					.onChange(async (value) => {
-						this.plugin.settings.retroEnabled = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('Minimum confidence')
-			.setDesc('Minimum confidence score for suggestions (0-1)')
-			.addSlider((slider) =>
-				slider
-					.setLimits(0, 1, 0.05)
-					.setValue(this.plugin.settings.retroMinConfidence)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.retroMinConfidence = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// ===== PERFORMANCE =====
-		new Setting(containerEl).setName('Performance').setHeading();
-
-		new Setting(containerEl)
-			.setName('Rebuild index')
-			.setDesc('Rebuild the entire search index')
-			.addButton((button) =>
-				button.setButtonText('Rebuild').onClick(async () => {
-					new Notice('Rebuilding index...');
-					await this.plugin.indexer.build();
-					new Notice('Index rebuilt successfully');
-				}),
-			);
 	}
 }
 
@@ -2031,7 +1641,7 @@ export default class LinksmithPlugin extends Plugin {
 		);
 
 		this.registerEvent(
-			this.app.vault.on('rename', (file, oldPath) => {
+			this.app.vault.on('rename', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
 					this.indexer.updateFile(file);
 				}
@@ -2042,9 +1652,9 @@ export default class LinksmithPlugin extends Plugin {
 		this.addCommand({
 			id: 'toggle-suggestions',
 			name: 'Toggle live suggestions',
-			callback: () => {
+			callback: async () => {
 				this.settings.suggestEnabled = !this.settings.suggestEnabled;
-				this.saveSettings();
+				await this.saveSettings();
 				this.updateStatusBar();
 				new Notice(
 					`Live suggestions ${this.settings.suggestEnabled ? 'enabled' : 'disabled'}`,
@@ -2055,10 +1665,10 @@ export default class LinksmithPlugin extends Plugin {
 		this.addCommand({
 			id: 'toggle-heading-suggestions',
 			name: 'Toggle heading suggestions',
-			callback: () => {
+			callback: async () => {
 				this.settings.suggestHeadingsEnabled =
 					!this.settings.suggestHeadingsEnabled;
-				this.saveSettings();
+				await this.saveSettings();
 				this.updateStatusBar();
 				new Notice(
 					`Heading suggestions ${this.settings.suggestHeadingsEnabled ? 'enabled' : 'disabled'}`,
@@ -2109,8 +1719,9 @@ export default class LinksmithPlugin extends Plugin {
 				if (!folder) return;
 
 				const files = folder.children.filter(
-					(f) => f instanceof TFile && f.extension === 'md',
-				) as TFile[];
+					(f): f is TFile =>
+						f instanceof TFile && f.extension === 'md',
+				);
 
 				new Notice(`Scanning ${files.length} files...`);
 
@@ -2146,10 +1757,9 @@ export default class LinksmithPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
+		this.settings = normalizeSettings(
 			await this.loadData(),
+			DEFAULT_SETTINGS,
 		);
 	}
 

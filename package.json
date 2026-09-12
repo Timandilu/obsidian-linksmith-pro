@@ -1,6 +1,6 @@
 {
 	"name": "linksmith-pro",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Suggest links to notes and headings as you type, then find missing links with a review-first batch tool.",
 	"main": "main.js",
 	"scripts": {
@@ -9,7 +9,8 @@
 		"format": "prettier --write main.ts src tests styles.css *.json *.md *.mjs",
 		"format:check": "prettier --check main.ts src tests styles.css *.json *.md *.mjs",
 		"test": "node --test tests/*.test.mjs",
-		"check": "npm run format:check && npm test && npm run build",
+		"lint": "eslint main.ts src --max-warnings 0",
+		"check": "npm run format:check && npm run lint && npm test && npm run build",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [],
@@ -24,10 +25,15 @@
 	},
 	"homepage": "https://github.com/Timandilu/obsidian-linksmith-pro#readme",
 	"devDependencies": {
+		"@eslint/js": "^9.39.5",
+		"@eslint/json": "^0.14.0",
 		"@types/node": "^25.0.0",
 		"esbuild": "^0.28.0",
+		"eslint": "^10.10.0",
+		"eslint-plugin-obsidianmd": "^0.4.2",
 		"obsidian": "^1.13.0",
 		"prettier": "^3.9.6",
-		"typescript": "~5.9.0"
+		"typescript": "~5.9.0",
+		"typescript-eslint": "^8.70.0"
 	}
 }

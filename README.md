@@ -72,6 +72,8 @@ Linksmith Pro is a powerful Obsidian plugin that enhances your knowledge managem
 
 ## ⚙️ Configuration
 
+Settings appear in Obsidian's global settings search on version 1.13.0 and later. The same controls remain available on Obsidian 1.5.0 and later.
+
 ### Suggest Settings
 
 - **Enable suggestions**: Toggle live link suggestions
@@ -169,6 +171,8 @@ linksmith_exclude_terms: # Never link these terms in this file
 
 Linksmith Pro works entirely inside Obsidian. It makes no network requests, collects no telemetry, requires no account, and does not access files outside your vault.
 
+To suggest links across notes, it enumerates Markdown file paths and indexes their cached titles, aliases, and headings. Exclusion rules filter the notes it indexes. Retro-linking reads the notes you choose to scan and writes changes when you apply reviewed suggestions.
+
 ### Data Structures
 
 - Inverted indices for fast term lookup
@@ -245,7 +249,7 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 ```bash
 # Clone the repository
 git clone https://github.com/Timandilu/obsidian-linksmith-pro.git
-cd linksmith-pro
+cd obsidian-linksmith-pro
 
 # Install dependencies
 npm install
@@ -253,15 +257,27 @@ npm install
 # Build for development (watch mode)
 npm run dev
 
-# Build for production
-npm run build
+# Check formatting, Obsidian lint rules, tests, and the production build
+npm run check
+```
+
+### Releases
+
+Keep `package.json`, `manifest.json`, and `versions.json` in sync, then push a plain version tag such as `1.0.1`. GitHub Actions checks the source, builds the plugin, and creates the release with attestations for `main.js`, `manifest.json`, and `styles.css`.
+
+After downloading an asset, verify its build provenance with:
+
+```bash
+gh attestation verify main.js --repo Timandilu/obsidian-linksmith-pro
 ```
 
 ### Project Structure
 
 ```
 linksmith-pro/
-├── main.ts           # Main plugin file with all components
+├── main.ts           # Plugin lifecycle and link engines
+├── src/              # Trigger helpers, settings validation, and settings tab
+├── tests/            # Regression tests
 ├── manifest.json     # Plugin metadata
 ├── styles.css        # UI styling
 ├── package.json      # Dependencies
